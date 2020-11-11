@@ -73,7 +73,6 @@ class LossBase(nn.Module):
 
 
 class CrossEntropy(LossBase):
-
     def __init__(self, reduction):
         super().__init__()
         self.reduction = reduction
@@ -85,23 +84,44 @@ class CrossEntropy(LossBase):
         return l
 
 
+class CrossEntropyForTracking(CrossEntropy):
+    def _compute_loss(self, model_output, labels):
+        _, z = model_output
+
+        M = torch.zeros(
+            labels.max()+1, z.size(0), 
+            dtype=z.dtype, 
+            device=z.device)
+
+        M[labels, torch.arange(z.size(0))] = 1
+
+        M = torch.nn.functional.normalize(M, p=1, dim=1)
+        
+        weight = torch.mm(M, z)
+
+        y_hat = torch.nn.functional.linear(z, weight)
+
+        return F.cross_entropy(y_hat, labels, reduction=self.reduction)
+
+
+def _lazy_set_inv_eye(obj, z):
+    try:
+        return obj._inv_eye
+
+    except AttributeError:
+        obj._inv_eye = ~torch.eye(
+        z.size(0), # = size of sub-batch
+        device=z.device,
+        dtype=bool)
+
+        return obj._inv_eye 
+
+
 class SupConLoss(LossBase):
     def __init__(self,
                  temperature):
         super().__init__()
-        self.temperature = temperature        
-
-    def inv_eye(self, z):
-        try:
-            return self._inv_eye
-
-        except AttributeError:
-            self._inv_eye = ~torch.eye(
-            z.size(0), # = size of sub-batch
-            device=z.device,
-            dtype=bool)
-
-            return self._inv_eye 
+        self.temperature = temperature
 
     def _compute_loss(self, model_output, labels):
 
@@ -121,7 +141,7 @@ class SupConLoss(LossBase):
         ips = torch.div(torch.matmul(z, z.T), self.temperature)
 
         # get selector for off-diagonal entries
-        inv_eye = self.inv_eye(z)
+        inv_eye = _lazy_set_inv_eye(self, z)
 
         # new inner product matrix where diagonal is removed
         ips = ips.masked_select(inv_eye).view(z.size(0), z.size(0) - 1)
@@ -151,19 +171,7 @@ class SupConLossWeighted(LossBase):
                  weight):
         super().__init__()
         self.temperature = temperature     
-        self.log_w = np.log(weight) if weight > 0 else -float('inf')   
-
-    def inv_eye(self, z):
-        try:
-            return self._inv_eye
-
-        except AttributeError:
-            self._inv_eye = ~torch.eye(
-            z.size(0), # = size of sub-batch
-            device=z.device,
-            dtype=bool)
-
-            return self._inv_eye 
+        self.log_w = np.log(weight) if weight > 0 else -float('inf')
 
     def __call__(self, model_output, labels):
 
@@ -180,7 +188,7 @@ class SupConLossWeighted(LossBase):
         w = 1./cnt.float()
 
         # get selector for off-diagonal entries
-        inv_eye = self.inv_eye(z)
+        inv_eye = _lazy_set_inv_eye(self, z)
 
         # inner product matrix (scaled by temp)
         ips = torch.div(torch.matmul(z, z.T), self.temperature)

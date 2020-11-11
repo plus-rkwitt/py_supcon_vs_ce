@@ -159,3 +159,36 @@ class Test_SupConLossWeighted:
         l2 = self.sup_con_loss_weighted(z, y, temp=t, weight=weight)
 
         assert l1.isclose(l2)
+
+
+class Test_CrossEntropyForTracking:
+
+    @staticmethod
+    def cross_entropy_for_tracking(z, y):
+        unique_labels = torch.arange(y.max()+1)
+
+        tmp = []
+        for l in unique_labels:
+            I = (y == l)
+            if sum(I) > 0: 
+                w_l = z[y == l].mean(dim=0)
+            else:
+                w_l = torch.zeros_like(z[0])
+
+            tmp.append(w_l)
+            
+        weight = torch.stack(tmp, dim=0)
+        y_hat = torch.nn.functional.linear(z, weight)
+        return torch.nn.functional.cross_entropy(y_hat, y, reduction='mean')
+
+    def test_1(self):
+
+        z = torch.randn(64, 32)
+        y = torch.tensor([0]*32 + [1]*16 + [3]*16)
+
+        loss_fn = exp.CrossEntropyForTracking(reduction='mean')
+
+        l1 = loss_fn((None, z), y)
+        l2 = self.cross_entropy_for_tracking(z, y)
+
+        assert l1.isclose(l2)

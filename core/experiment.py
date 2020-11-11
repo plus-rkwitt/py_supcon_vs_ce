@@ -114,7 +114,8 @@ class SupConLoss(LossBase):
         mask = torch.eq(y, y.T)
 
         # weighting factor
-        w = 1./(mask.sum(-1, keepdim=True).float()-1)
+        cnt = mask.sum(-1, keepdim=True).float()-1
+        w = 1./cnt.float()
 
         # inner product matrix (scaled by temp)
         ips = torch.div(torch.matmul(z, z.T), self.temperature)
@@ -127,6 +128,12 @@ class SupConLoss(LossBase):
 
         # new mask where diagonal is removed
         mask = mask.masked_select(inv_eye).view(z.size(0), z.size(0) - 1)
+
+        #remove entries where there are no same-class partners in the batch
+        I = (cnt.squeeze() > 0)
+        ips = ips[I]
+        mask = mask[I]
+        w = w[I]
 
         # apply log-softmax along dim=1 to inner product matrix with removed diagonal entries
         ips = nn.functional.log_softmax(ips, dim=1)*w
@@ -169,7 +176,8 @@ class SupConLossWeighted(LossBase):
         mask = torch.eq(y, y.T)
 
         # weighting factor
-        w = 1./(mask.sum(-1, keepdim=True).float()-1)
+        cnt = mask.sum(-1, keepdim=True).float()-1
+        w = 1./cnt.float()
 
         # get selector for off-diagonal entries
         inv_eye = self.inv_eye(z)
@@ -182,6 +190,12 @@ class SupConLossWeighted(LossBase):
 
         # new mask where diagonal is removed
         mask = mask.masked_select(inv_eye).view(z.size(0), z.size(0) - 1)
+
+        #remove entries where there are no same-class partners in the batch
+        I = (cnt.squeeze() > 0)
+        ips = ips[I]
+        mask = mask[I]
+        w = w[I]
 
         # 1. Innerclass Contraction
         con = -(ips*w)[mask]        

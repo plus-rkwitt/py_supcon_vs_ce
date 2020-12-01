@@ -10,12 +10,14 @@ Reference:
 '''
 
 
+
+
 import typing
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_utils.nn as mynn
-from .utils import SphereProjection, Tanh
+from .utils import SphereProjection, Tanh, NormedLinear, SphericalLinear
 class BasicBlock(nn.Module):
     expansion = 1
 
@@ -81,6 +83,8 @@ class ResNet(nn.Module):
                  num_blocks: int,
                  num_classes: int,
                  compactification: str,
+                 linear_bias: bool,
+                 norm_linear: bool,
                  latent_dim: typing.Optional[int]):
         super(ResNet, self).__init__()
 
@@ -110,9 +114,12 @@ class ResNet(nn.Module):
             compactifier
         )
 
-        linear = nn.Linear(
+        linear_type = NormedLinear if norm_linear else nn.Linear
+
+        linear = linear_type(
             512*block.expansion if latent_dim is None else latent_dim,
-            num_classes)
+            num_classes,
+            bias=linear_bias)
 
         self.cls = linear
 
@@ -130,21 +137,21 @@ class ResNet(nn.Module):
         return y_hat, z
 
 
-def ResNet18(num_classes, compactification, latent_dim):
-    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes, compactification, latent_dim)
+def ResNet18(num_classes, compactification, linear_bias, norm_linear, latent_dim):
+    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes, compactification, linear_bias, norm_linear, latent_dim)
 
 
-def ResNet34(num_classes, compactification, latent_dim):
-    return ResNet(BasicBlock, [3, 4, 6, 3], num_classes, compactification, latent_dim)
+def ResNet34(num_classes, compactification, linear_bias, norm_linear, latent_dim):
+    return ResNet(BasicBlock, [3, 4, 6, 3], num_classes, compactification, linear_bias, norm_linear, latent_dim)
 
 
-def ResNet50(num_classes, compactification, latent_dim):
-    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes, compactification, latent_dim)
+def ResNet50(num_classes, compactification, linear_bias, norm_linear, latent_dim):
+    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes, compactification,  linear_bias, norm_linear, latent_dim)
 
 
-def ResNet101(num_classes, compactification, latent_dim):
-    return ResNet(Bottleneck, [3, 4, 23, 3], num_classes, compactification, latent_dim)
+def ResNet101(num_classes, compactification, linear_bias, norm_linear, latent_dim):
+    return ResNet(Bottleneck, [3, 4, 23, 3], num_classes, compactification,  linear_bias, norm_linear, latent_dim)
 
 
-def ResNet152(num_classes, compactification, latent_dim):
-    return ResNet(Bottleneck, [3, 8, 36, 3], num_classes, compactification, latent_dim)
+def ResNet152(num_classes, compactification, linear_bias, norm_linear, latent_dim):
+    return ResNet(Bottleneck, [3, 8, 36, 3], num_classes, compactification,  linear_bias, norm_linear, latent_dim)

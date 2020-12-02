@@ -5,47 +5,81 @@ import torch.nn.functional as F
 import numpy as np
 
 
-class SphericalLinear(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, **kwargs):
+# class SphericalLinear(torch.nn.Module):
+#     def __init__(self, input_dim, output_dim, **kwargs):
+#         super().__init__()
+#         self.w = torch.nn.Parameter(torch.randn(output_dim, input_dim-1))
+
+#     def forward(self, x):
+
+#         w_cos = torch.cos(self.w)
+#         w_sin = torch.sin(self.w)
+
+#         ones = torch.ones(self.w.size(
+#             0), 1, dtype=self.w.dtype, device=self.w.device)
+
+#         w_cos = torch.cat((w_cos, ones), dim=1)
+#         w_sin = torch.cumprod(w_sin, dim=1)
+#         w_sin = torch.cat((ones, w_sin), dim=1)
+
+#         w = w_sin * w_cos
+
+#         return torch.matmul(x, w.T)
+
+#     @property
+#     def weight(self):
+#         return self.w
+
+
+class NormedLinear(torch.nn.Module):
+    def __init__(self,
+                 in_features,
+                 out_features,
+                 learn_radius=False,
+                 radius_init=1.0, **kwargs):
         super().__init__()
-        self.w = torch.nn.Parameter(torch.randn(output_dim, input_dim-1))
-    
+        assert isinstance(radius_init, float)
+        assert isinstance(learn_radius, bool)
+
+        self._r = torch.tensor(radius_init)
+
+        if learn_radius:
+            self._r = torch.nn.Parameter(self._r)
+
+        self._w = torch.nn.Parameter(
+            torch.randn(out_features, in_features)
+        )
+
     def forward(self, x):
-        
-        w_cos = torch.cos(self.w)
-        w_sin = torch.sin(self.w)
-        
-        ones = torch.ones(self.w.size(0), 1, dtype=self.w.dtype, device=self.w.device)
-        
-        w_cos = torch.cat((w_cos, ones), dim=1)
-        w_sin = torch.cumprod(w_sin, dim=1)
-        w_sin = torch.cat((ones, w_sin), dim=1)
-        
-        w = w_sin * w_cos
-        
-        return torch.matmul(x, w.T)
+
+        w = self._w/ self._w.norm(p=2, dim=1, keepdim=True)
+        w = self._w * self._r.abs()
+
+        return torch.nn.functional.linear(x, w)
 
     @property
     def weight(self):
-        return self.w
-
-
-class NormedLinear(torch.nn.Linear):
-    def forward(self, x):
-        self.weight.data = self.weight / torch.norm(self.weight, dim=1, p=2, keepdim=True)
-        return super().forward(x)
-
+        return self._w
 
 class SphereProjection(nn.Module):
-    def __init__(self, p):
+    def __init__(self, p, learn_radius=False, radius_init=1.0):
         super().__init__()
-        assert isinstance(p, int) and p >= 1 
+        assert isinstance(radius_init, float)
+        assert isinstance(learn_radius, bool)
+
+        assert isinstance(p, int) and p >= 1
         self.p = p
+
+        self._r = torch.tensor(radius_init)
+
+        if learn_radius:
+            self._r = torch.nn.Parameter(self._r)
 
     def forward(self, x):
 
         assert x.ndim == 2
-        return x / torch.norm(x, p=self.p, keepdim=True, dim=1)
+        return self._r.abs() * x / torch.norm(x, p=self.p, keepdim=True, dim=1)
+
 
 class Tanh(nn.Module):
     def __init__(self):
@@ -64,44 +98,44 @@ class RowNormalizedLinear(nn.Linear):
 
 class BjorckLinear(nn.Module):
     def __init__(self, in_features, out_features, bias=True, iters=10, beta=0.5):
-        
+
         super(BjorckLinear, self).__init__()
-        
+
         self.in_features = in_features
         self.out_features = out_features
         self.iters = iters
         self.beta = 0.5
-        
+
         self.weight = Parameter(torch.Tensor(out_features, in_features))
         if bias:
             self.bias = Parameter(torch.Tensor(out_features))
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
-        
+
     def reset_parameters(self):
         stdv = 1. / np.sqrt(self.weight.size(1))
         nn.init.orthogonal_(self.weight, gain=stdv)
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
-            
+
     def _orthonormalize(self, iters=10, beta=0.5):
         """currently only supports order=1"""
-        w =  self.weight.t() / self._get_safe_bjorck_scaling()
+        w = self.weight.t() / self._get_safe_bjorck_scaling()
         for _ in range(iters):
             w_t_w = w.t().mm(w)
             w = (1 + beta) * w - beta * w.mm(w_t_w)
-        return w 
-    
+        return w
+
     def _get_safe_bjorck_scaling(self):
         bjorck_scaling = torch.tensor(
-            [np.sqrt(self.weight.size(0) * self.weight.size(1))], 
+            [np.sqrt(self.weight.size(0) * self.weight.size(1))],
             device=self.weight.device).float()
         return bjorck_scaling
 
     def forward(self, x):
         ortho_w = self._orthonormalize(
-            self.iters, 
+            self.iters,
             self.beta).t()
-        
+
         return F.linear(x, ortho_w, self.bias)

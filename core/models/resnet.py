@@ -10,21 +10,15 @@ Reference:
 '''
 
 
-
-
-import typing
-import torch
-import torch.nn as nn
 import torch.nn.functional as F
-
-
-from torch.nn import Linear 
-
-
+import torch.nn as nn
+import torch
+import typing
+import functools
 import pytorch_utils.nn as mynn
-
-
 from .utils import SphereProjection, Tanh, NormedLinear
+
+
 class BasicBlock(nn.Module):
     expansion = 1
 
@@ -84,33 +78,42 @@ class Bottleneck(nn.Module):
         return out
 
 
+def _check_cfg(cfg):
+    assert isinstance(cfg, tuple) and len(cfg) == 2
+    type_str, kwargs = cfg
+    assert isinstance(type_str, str)
+    assert isinstance(kwargs, dict)
+
+
 class ResNet(nn.Module):
+
+    compactifier_types = {
+        'none': nn.Identity,
+        'sphere_l2': functools.partial(SphereProjection, p=2, learn_radius=False, radius_init=1),
+        'tahn': Tanh,
+        'sphere_l2_learned': functools.partial(SphereProjection, p=2, learn_radius=True)
+    }
+
+    linear_types = {
+        'Linear': nn.Linear,
+        'NormedLinear': NormedLinear
+    }
+
     def __init__(self,
                  block: int,
                  num_blocks: int,
                  num_classes: int,
-                 compactification: str,
-                 linear_bias: bool,
+                 compactification_cfg: tuple,
                  linear_cfg: tuple,
                  latent_dim: typing.Optional[int]):
         super(ResNet, self).__init__()
 
         self.in_planes = 64
+        _check_cfg(compactification_cfg)
+        _check_cfg(linear_cfg)
 
-
-        assert isinstance(linear_cfg, tuple) and len(linear_cfg) == 2
-        linear_type, linear_kwargs = linear_cfg 
-        assert isinstance(linear_type, str)
-        assert isinstance(linear_kwargs, dict)        
-
-        assert compactification in ['none', 'sphere_l2', 'tanh', 'sphere_l2_learned']
-        tmp = {
-            'none': nn.Identity(),
-            'sphere_l2': SphereProjection(2),
-            'tahn': Tanh(), 
-            'sphere_l2_learned': SphereProjection(2, learn_radius=True)
-        }
-        compactifier = tmp[compactification]
+        comp_type, comp_kwargs = compactification_cfg
+        compactifier = self.compactifier_types[comp_type](**comp_kwargs)
 
         self.feat_ext = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
@@ -126,14 +129,13 @@ class ResNet(nn.Module):
                 512*block.expansion, latent_dim
             ),
             compactifier
-        )        
+        )
 
-        linear = globals()[linear_type](
+        lin_type, lin_kwargs = linear_cfg
+        self.cls = self.linear_types[lin_type](
             512*block.expansion if latent_dim is None else latent_dim,
             num_classes,
-            **linear_kwargs)
-
-        self.cls = linear
+            **lin_kwargs)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -149,21 +151,21 @@ class ResNet(nn.Module):
         return y_hat, z
 
 
-def ResNet18(num_classes, compactification, linear_bias, linear_cfg, latent_dim):
-    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes, compactification, linear_bias, linear_cfg, latent_dim)
+def ResNet18(num_classes, compactification_cfg, linear_cfg, latent_dim):
+    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes, compactification_cfg, linear_cfg, latent_dim)
 
 
-def ResNet34(num_classes, compactification, linear_bias, linear_cfg, latent_dim):
-    return ResNet(BasicBlock, [3, 4, 6, 3], num_classes, compactification, linear_bias, linear_cfg, latent_dim)
+def ResNet34(num_classes, compactification_cfg, linear_cfg, latent_dim):
+    return ResNet(BasicBlock, [3, 4, 6, 3], num_classes, compactification_cfg, linear_cfg, latent_dim)
 
 
-def ResNet50(num_classes, compactification, linear_bias, linear_cfg, latent_dim):
-    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes, compactification,  linear_bias, linear_cfg, latent_dim)
+def ResNet50(num_classes, compactification_cfg, linear_cfg, latent_dim):
+    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes, compactification_cfg,  linear_cfg, latent_dim)
 
 
-def ResNet101(num_classes, compactification, linear_bias, linear_cfg, latent_dim):
-    return ResNet(Bottleneck, [3, 4, 23, 3], num_classes, compactification,  linear_bias, linear_cfg, latent_dim)
+def ResNet101(num_classes, compactification_cfg, linear_cfg, latent_dim):
+    return ResNet(Bottleneck, [3, 4, 23, 3], num_classes, compactification_cfg,  linear_cfg, latent_dim)
 
 
-def ResNet152(num_classes, compactification, linear_bias, linear_cfg, latent_dim):
-    return ResNet(Bottleneck, [3, 8, 36, 3], num_classes, compactification,  linear_bias, linear_cfg, latent_dim)
+def ResNet152(num_classes, compactification_cfg, linear_cfg, latent_dim):
+    return ResNet(Bottleneck, [3, 8, 36, 3], num_classes, compactification_cfg,  linear_cfg, latent_dim)

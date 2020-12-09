@@ -361,6 +361,7 @@ class Experiment(ExperimentBase):
         kwargs['num_classes'] = self.num_classes
         self.model = getattr(core.models, id)(**kwargs)
         self.model.to(self.device)
+        print(self.model)
 
     def setup_opt(self):
         self.opt = \

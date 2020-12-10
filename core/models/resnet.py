@@ -89,7 +89,7 @@ class ResNet(nn.Module):
 
     compactifier_types = {
         'none': nn.Identity,
-        'sphere_l2': functools.partial(SphereProjection, p=2, learn_radius=False, radius_init=1),
+        'sphere_l2': functools.partial(SphereProjection, p=2, learn_radius=False, radius_init=1.),
         'tahn': Tanh,
         'sphere_l2_learned': functools.partial(SphereProjection, p=2, learn_radius=True)
     }

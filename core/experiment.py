@@ -29,19 +29,19 @@ class RandomBatchSampler:
         self.num_batches = num_batches
         self.batch_size = batch_size
         self.replace = replace
-        
+
     def __len__(self):
         return self.num_batches
-    
+
     def __iter__(self):
         for _ in range(self.num_batches):
-            
+
             batch_i = np.random.choice(
                 self.high,
                 self.batch_size,
                 replace=self.replace
             )
-            
+
             yield batch_i
 
 
@@ -64,7 +64,7 @@ class RandomLabels(torch.utils.data.dataset.Dataset):
 class LossBase(nn.Module):
     def __init__(self):
         super().__init__()
-        
+
     def _compute_loss(self, model_output, labels):
         raise NotImplementedError()
 
@@ -80,7 +80,7 @@ class CrossEntropy(LossBase):
     def _compute_loss(self, model_output, labels):
         y_hat, _ = model_output
         l = F.cross_entropy(y_hat, labels, reduction=self.reduction)
-               
+
         return l
 
 
@@ -89,14 +89,14 @@ class CrossEntropyForTracking(CrossEntropy):
         _, z = model_output
 
         M = torch.zeros(
-            labels.max()+1, z.size(0), 
-            dtype=z.dtype, 
+            labels.max()+1, z.size(0),
+            dtype=z.dtype,
             device=z.device)
 
         M[labels, torch.arange(z.size(0))] = 1
 
         M = torch.nn.functional.normalize(M, p=1, dim=1)
-        
+
         weight = torch.mm(M, z)
 
         y_hat = torch.nn.functional.linear(z, weight)
@@ -110,11 +110,11 @@ def _lazy_set_inv_eye(obj, z):
 
     except AttributeError:
         obj._inv_eye = ~torch.eye(
-        z.size(0), # = size of sub-batch
-        device=z.device,
-        dtype=bool)
+            z.size(0),  # = size of sub-batch
+            device=z.device,
+            dtype=bool)
 
-        return obj._inv_eye 
+        return obj._inv_eye
 
 
 class SupConLoss(LossBase):
@@ -149,7 +149,7 @@ class SupConLoss(LossBase):
         # new mask where diagonal is removed
         mask = mask.masked_select(inv_eye).view(z.size(0), z.size(0) - 1)
 
-        #remove entries where there are no same-class partners in the batch
+        # remove entries where there are no same-class partners in the batch
         I = (cnt.squeeze() > 0)
         ips = ips[I]
         mask = mask[I]
@@ -170,7 +170,7 @@ class SupConLossWeighted(LossBase):
                  temperature,
                  weight):
         super().__init__()
-        self.temperature = temperature     
+        self.temperature = temperature
         self.log_w = np.log(weight) if weight > 0 else -float('inf')
 
     def __call__(self, model_output, labels):
@@ -199,17 +199,17 @@ class SupConLossWeighted(LossBase):
         # new mask where diagonal is removed
         mask = mask.masked_select(inv_eye).view(z.size(0), z.size(0) - 1)
 
-        #remove entries where there are no same-class partners in the batch
+        # remove entries where there are no same-class partners in the batch
         I = (cnt.squeeze() > 0)
         ips = ips[I]
         mask = mask[I]
         w = w[I]
 
         # 1. Innerclass Contraction
-        con = -(ips*w)[mask]        
+        con = -(ips*w)[mask]
         con = con.sum()
 
-        #2. Repulsion
+        # 2. Repulsion
         mask_log = mask.float()
         mask_log[mask] = self.log_w
         rep = torch.logsumexp(ips+mask_log, dim=-1)
@@ -239,17 +239,17 @@ class Experiment(ExperimentBase):
 
     args = {k: v for k, v in ExperimentBase.args.items()}
     args.update(
-        {   
-            'num_batches': int, 
+        {
+            'num_batches': int,
             'num_runs': int,
-            'num_samples': (int, type(None)), 
+            'num_samples': (int, type(None)),
             'model': tuple,
             'lr_init': float,
             'weight_decay': float,
             'ds_train': str,
             'ds_test': str,
             'momentum': float,
-            'augment': str, 
+            'augment': str,
             'batch_size': int,
             'losses': arg_check_losses,
             'losses_track_only': arg_check_losses,
@@ -257,6 +257,8 @@ class Experiment(ExperimentBase):
             'evaluation_policies': tuple
         }
     )
+
+    num_batches_for_retraining_of_linear = 10000
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -291,10 +293,11 @@ class Experiment(ExperimentBase):
     def ds_setup_iter(self):
 
         if self.args['num_samples'] is None:
-            ds_train_splits = [core.data.ds_factory(self.args['ds_train'])]*self.args['num_runs']
+            ds_train_splits = [core.data.ds_factory(
+                self.args['ds_train'])]*self.args['num_runs']
         else:
             ds_train_splits = core.data.ds_split_factory(
-                self.args['ds_train'], 
+                self.args['ds_train'],
                 self.args['num_samples']
             )
             ds_train_splits = ds_train_splits[:self.args['num_runs']]
@@ -380,10 +383,10 @@ class Experiment(ExperimentBase):
 
     def setup_dl_train(self):
         self.dl_train = torch.utils.data.DataLoader(
-            self.ds_train, 
+            self.ds_train,
             batch_sampler=RandomBatchSampler(
-                len(self.ds_train), 
-                self.args['num_batches'], 
+                len(self.ds_train),
+                self.args['num_batches'],
                 self.args['batch_size']
             )
         )
@@ -436,19 +439,20 @@ class Experiment(ExperimentBase):
 
                 self.logger.log_value('{}_{}'.format(policy, k), acc)
 
-            self.logger.write_model_to_disk(
-                policy, classifier.cpu())
+            if self.batch_i == self.args['num_batches'] - 1:
+                self.logger.write_model_to_disk(
+                    policy, classifier.cpu())
 
         if 'retrained_linear' in self.args['evaluation_policies']:
 
-            num_batches = 10000
+            num_batches = self.num_batches_for_retraining_of_linear
 
             dl_train = torch.utils.data.DataLoader(
                 self.ds_train,
                 batch_sampler=RandomBatchSampler(
-                    len(self.ds_train), 
-                    num_batches, 
-                    128, 
+                    len(self.ds_train),
+                    num_batches,
+                    128,
                 )
             )
 
@@ -509,6 +513,9 @@ class Experiment(ExperimentBase):
 
 
 class ExpRandomeLabeledData(Experiment):
+
+    num_batches_for_retraining_of_linear = 1000
+
     def ds_setup_iter(self):
         for _ in super().ds_setup_iter():
             self.ds_train = RandomLabels(
@@ -516,8 +523,3 @@ class ExpRandomeLabeledData(Experiment):
                 self.num_classes)
 
             yield None
-
-
-
-
-

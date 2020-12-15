@@ -453,7 +453,7 @@ class Experiment(ExperimentBase):
             )
 
             classifier = nn.Linear(
-                latent_dim, self.num_classes).to(self.device)
+                latent_dim, self.num_classes, bias=False).to(self.device)
             classifier.train()
 
             opt = torch.optim.SGD(classifier.parameters(),
@@ -516,5 +516,8 @@ class ExpRandomeLabeledData(Experiment):
                 self.num_classes)
 
             yield None
+
+
+
 
 

@@ -10,6 +10,8 @@ Reference:
 '''
 
 
+
+
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
@@ -17,26 +19,27 @@ import typing
 import functools
 import pytorch_utils.nn as mynn
 from .utils import SphereProjection, Tanh, NormedLinear
-
-
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1):
+    def __init__(self, in_planes, planes, stride=1, batch_norm=True):
         super(BasicBlock, self).__init__()
+
+        batch_norm_factory = nn.BatchNorm2d if batch_norm else nn.Identity
+
         self.conv1 = nn.Conv2d(
             in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
+        self.bn1 = batch_norm_factory(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3,
                                stride=1, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.bn2 = batch_norm_factory(planes)
 
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_planes, self.expansion*planes,
                           kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(self.expansion*planes)
+                batch_norm_factory(self.expansion*planes)
             )
 
     def forward(self, x):
@@ -50,23 +53,26 @@ class BasicBlock(nn.Module):
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, in_planes, planes, stride=1):
+    def __init__(self, in_planes, planes, stride=1, batch_norm=True):
         super(Bottleneck, self).__init__()
+
+        batch_norm_factory = nn.BatchNorm2d if batch_norm else nn.Identity
+
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
+        self.bn1 = batch_norm_factory(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3,
                                stride=stride, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.bn2 = batch_norm_factory(planes)
         self.conv3 = nn.Conv2d(planes, self.expansion *
                                planes, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(self.expansion*planes)
+        self.bn3 = batch_norm_factory(self.expansion*planes)
 
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion*planes:
             self.shortcut = nn.Sequential(
                 nn.Conv2d(in_planes, self.expansion*planes,
                           kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(self.expansion*planes)
+                batch_norm_factory(self.expansion*planes)
             )
 
     def forward(self, x):
@@ -101,12 +107,15 @@ class ResNet(nn.Module):
 
     def __init__(self,
                  block: int,
-                 num_blocks: int,
+                 num_blocks: list,
                  num_classes: int,
                  compactification_cfg: tuple,
                  linear_cfg: tuple,
+                 batch_norm: bool,
                  latent_dim: typing.Optional[int]):
         super(ResNet, self).__init__()
+
+        batch_norm_factory = nn.BatchNorm2d if batch_norm else nn.Identity
 
         self.in_planes = 64
         _check_cfg(compactification_cfg)
@@ -117,12 +126,16 @@ class ResNet(nn.Module):
 
         self.feat_ext = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(64),
+            batch_norm_factory(64),
             nn.ReLU(),
-            self._make_layer(block, 64, num_blocks[0], stride=1),
-            self._make_layer(block, 128, num_blocks[1], stride=2),
-            self._make_layer(block, 256, num_blocks[2], stride=2),
-            self._make_layer(block, 512, num_blocks[3], stride=2),
+            self._make_layer(
+                block, 64, num_blocks[0], stride=1, batch_norm=batch_norm),
+            self._make_layer(
+                block, 128, num_blocks[1], stride=2, batch_norm=batch_norm),
+            self._make_layer(
+                block, 256, num_blocks[2], stride=2, batch_norm=batch_norm),
+            self._make_layer(
+                block, 512, num_blocks[3], stride=2, batch_norm=batch_norm),
             nn.AvgPool2d(kernel_size=4),
             mynn.LinearView(),
             nn.Identity() if latent_dim is None else nn.Linear(
@@ -137,11 +150,11 @@ class ResNet(nn.Module):
             num_classes,
             **lin_kwargs)
 
-    def _make_layer(self, block, planes, num_blocks, stride):
+    def _make_layer(self, block, planes, num_blocks, stride, batch_norm):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_planes, planes, stride))
+            layers.append(block(self.in_planes, planes, stride, batch_norm))
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
@@ -151,21 +164,12 @@ class ResNet(nn.Module):
         return y_hat, z
 
 
-def ResNet18(num_classes, compactification_cfg, linear_cfg, latent_dim):
-    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes, compactification_cfg, linear_cfg, latent_dim)
+ResNet18 = functools.partial(ResNet, BasicBlock, [2, 2, 2, 2])
 
+ResNet34 = functools.partial(ResNet, BasicBlock, [3, 4, 6, 3])
 
-def ResNet34(num_classes, compactification_cfg, linear_cfg, latent_dim):
-    return ResNet(BasicBlock, [3, 4, 6, 3], num_classes, compactification_cfg, linear_cfg, latent_dim)
+ResNet50 = functools.partial(ResNet, Bottleneck, [3, 4, 6, 3])
 
+ResNet101 = functools.partial(ResNet, Bottleneck, [3, 4, 23, 3])
 
-def ResNet50(num_classes, compactification_cfg, linear_cfg, latent_dim):
-    return ResNet(Bottleneck, [3, 4, 6, 3], num_classes, compactification_cfg,  linear_cfg, latent_dim)
-
-
-def ResNet101(num_classes, compactification_cfg, linear_cfg, latent_dim):
-    return ResNet(Bottleneck, [3, 4, 23, 3], num_classes, compactification_cfg,  linear_cfg, latent_dim)
-
-
-def ResNet152(num_classes, compactification_cfg, linear_cfg, latent_dim):
-    return ResNet(Bottleneck, [3, 8, 36, 3], num_classes, compactification_cfg,  linear_cfg, latent_dim)
+ResNet152 = functools.partial(ResNet, Bottleneck, [3, 8, 36, 3])

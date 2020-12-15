@@ -452,7 +452,7 @@ class Experiment(ExperimentBase):
                 batch_sampler=RandomBatchSampler(
                     len(self.ds_train),
                     num_batches,
-                    128,
+                    self.args['batch_size'],
                 )
             )
 
@@ -467,6 +467,8 @@ class Experiment(ExperimentBase):
                 opt,
                 lambda i: ((num_batches - i)/num_batches)**5, last_epoch=-1)
 
+            list_l = []
+
             for batch_i, (batch_x, batch_y) in enumerate(dl_train):
                 batch_x, batch_y = batch_x.to(
                     self.device), batch_y.to(self.device)
@@ -478,11 +480,12 @@ class Experiment(ExperimentBase):
                 y_hat = classifier(z)
 
                 l = nn.functional.cross_entropy(y_hat, batch_y)
-                self.logger.log_value('retrained_linear_loss', l)
+                list_l.append(l)
 
                 l.backward()
                 opt.step()
                 sch.step()
+            self.logger.log_value('retrained_linear_loss', list_l)
 
             evaluate_classifier_and_save(classifier, 'retrained_linear')
 

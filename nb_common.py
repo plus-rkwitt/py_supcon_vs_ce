@@ -3,6 +3,7 @@ import tempfile
 
 import core.experiment
 from pytorch_utils.logging import LoggerReader
+from pytorch_utils.evaluation import apply_model, argmax_and_accuracy
 
 
 def load_results(root, tag=None):
@@ -45,3 +46,18 @@ def load_experiment_context(path, run_i=0):
     ret['model'] = r.load_model(run_i, 'model')
 
     return ret
+
+
+def compute_latent(path, run_i=0, train=True, device='cpu'):
+    exp_context = load_experiment_context(path, run_i=run_i)
+    
+    if train:
+        ds = exp_context['ds_train']
+    else:
+        ds = exp_context['ds_test']
+        
+    feat_ext = exp_context['model'].feat_ext
+    
+    Z, Y = apply_model(dataset=ds, model=feat_ext, device=device)
+    
+    return Z, Y

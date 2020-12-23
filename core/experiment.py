@@ -320,7 +320,7 @@ class Experiment(ExperimentBase):
             'supcon']
 
         for e in self.args['evaluation_policies']:
-            assert e in ('linear', 'retrained_linear', 'explicit_linear')
+            assert e in ('linear', 'retrained_linear', 'explicit_linear'), e
 
         self.losses, self.losses_track_only = [], []
 
@@ -419,7 +419,7 @@ class Experiment(ExperimentBase):
         kwargs['num_classes'] = self.num_classes
         self.model = getattr(core.models, id)(**kwargs)
         self.model.to(self.device)
-        print(self.model)
+        # print(self.model)
 
     def setup_opt(self):
         self.opt = \

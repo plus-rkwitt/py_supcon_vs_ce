@@ -162,14 +162,19 @@ def _lazy_set_inv_eye(obj, z):
 
 class SupConLoss(LossBase):
     def __init__(self,
-                 temperature):
+                 temperature,
+                 project_input_to_sphere=False):
         super().__init__()
         self.temperature = temperature
+        self.project_input_to_sphere=project_input_to_sphere
 
     def _compute_loss(self, model_output, labels):
 
         # latent representation
         _, z = model_output
+
+        if self.project_input_to_sphere:
+            z = z / torch.norm(z, dim=1, p=2, keepdim=True)
 
         y = labels.view(-1, 1)
 
@@ -211,7 +216,7 @@ class SupConLoss(LossBase):
 class SupConLossWeighted(LossBase):
     def __init__(self,
                  temperature,
-                 weight):
+                 weight,):
         super().__init__()
         self.temperature = temperature
         self.log_w = np.log(weight) if weight > 0 else -float('inf')
@@ -297,7 +302,8 @@ class Experiment(ExperimentBase):
             'losses': arg_check_losses,
             'losses_track_only': arg_check_losses,
             'w_losses': (tuple, type(None)),
-            'evaluation_policies': tuple
+            'evaluation_policies': tuple, 
+            'scheduler': str
         }
     )
 
@@ -336,6 +342,8 @@ class Experiment(ExperimentBase):
             assert len(w_losses) == len(self.losses)
             assert all((isinstance(w, float) for w in w_losses))
             self.w_losses = w_losses
+
+        assert self.args['scheduler'] in ['exponential', 'cosine']
 
     def ds_setup_iter(self):
 
@@ -423,10 +431,21 @@ class Experiment(ExperimentBase):
                 nesterov=False)
 
     def setup_scheduler(self):
-        num_batches = float(self.args['num_batches'])
-        self.scheduler = torch.optim.lr_scheduler.LambdaLR(
-            self.opt,
-            lambda i: ((num_batches - i)/num_batches)**5, last_epoch=-1)
+        if self.args['scheduler'] == 'exponential': 
+            num_batches = float(self.args['num_batches'])
+            self.scheduler = torch.optim.lr_scheduler.LambdaLR(
+                self.opt,
+                lambda i: ((num_batches - i)/num_batches)**5, last_epoch=-1)
+
+        elif self.args['scheduler'] == 'cosine':
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    self.opt,
+                    self.args['num_batches'],
+                    eta_min=0,
+                    last_epoch=-1)
+
+        else:
+            raise ValueError('Wrong value for scheduler!')
 
     def setup_dl_train(self):
         self.dl_train = torch.utils.data.DataLoader(

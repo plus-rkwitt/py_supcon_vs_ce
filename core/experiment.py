@@ -307,7 +307,7 @@ class Experiment(ExperimentBase):
         }
     )
 
-    num_batches_for_retraining_of_linear = 10000
+    num_batches_for_retraining_of_linear = 5000
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

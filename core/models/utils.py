@@ -31,6 +31,40 @@ import numpy as np
 #         return self.w
 
 
+class FixedSphericalSimplexLinear(torch.nn.Module):
+    def __init__(self, in_features, out_features, radius=1.):
+        super().__init__()
+        self.radius = radius
+
+        def normalize(x): 
+            x = x / torch.norm(x, dim=1, p=2, keepdim=True)
+            x = x*self.radius
+            return x
+
+        points = torch.randn(200, 512)
+        points = normalize(points)
+        points = torch.nn.Parameter(points)
+
+        opt = torch.optim.SGD([points], lr=0.01)
+
+        for _ in range(1000):
+
+            l = (points.unsqueeze(1) - points.unsqueeze(0)).norm(p=2, dim=-1)
+            l = torch.triu(l, diagonal=1)
+            l = (1 / l).sum()
+    
+            l.backward()
+            
+            opt.step()
+    
+            points.data = normalize(points.data)
+
+        self.register_buffer('weight', points.data)
+
+    def forward(self, x):
+        return torch.nn.functional.linear(x, self.weight)
+        
+
 class NormedLinear(torch.nn.Module):
     def __init__(self,
                  in_features,

@@ -18,7 +18,9 @@ import torch
 import typing
 import functools
 import pytorch_utils.nn as mynn
-from .utils import SphereProjection, Tanh, NormedLinear
+from .utils import SphereProjection, Tanh, NormedLinear, FixedSphericalSimplexLinear
+
+
 class BasicBlock(nn.Module):
     expansion = 1
 
@@ -102,7 +104,8 @@ class ResNet(nn.Module):
 
     linear_types = {
         'Linear': nn.Linear,
-        'NormedLinear': NormedLinear
+        'NormedLinear': NormedLinear, 
+        'FixedSphericalSimplexLinear': FixedSphericalSimplexLinear
     }
 
     def __init__(self,

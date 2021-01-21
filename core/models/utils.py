@@ -41,7 +41,7 @@ class FixedSphericalSimplexLinear(torch.nn.Module):
             x = x*self.radius
             return x
 
-        points = torch.randn(200, 512)
+        points = torch.randn(out_features, in_features)
         points = normalize(points)
         points = torch.nn.Parameter(points)
 

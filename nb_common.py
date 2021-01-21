@@ -1,10 +1,12 @@
 import glob
 import tempfile
 import pandas as pd
+import numpy as np
 
 import core.experiment
 from pytorch_utils.logging import LoggerReader
 from pytorch_utils.evaluation import apply_model, argmax_and_accuracy
+from collections import defaultdict
 
 
 def load_results(root, tag=None):
@@ -54,6 +56,50 @@ def args_df_from_results(results, args_white_list=None, args_simple=None):
         R.append(df)   
         
     return pd.concat(R, sort=False)
+
+
+def progress_from_results(root):
+    results = load_results(root, tag=None)
+    
+    tmp = defaultdict(list)
+    
+    for i, r in enumerate(results):
+        
+        p = progress(r)
+        
+        if isinstance(p, str):
+            tmp['Idx'].append(i)
+            tmp['progress'].append(p)
+            tmp['path'].append(r.path)
+            
+    return pd.DataFrame(tmp)
+
+
+def df_from_results(root, args_white_list, args_simple):
+    results = load_results(root)
+    A = args_df_from_results(results, args_white_list, args_simple)
+    progress
+    tmp = []
+    for i, r in enumerate(results):
+        df = {}
+        for k in [
+            'linear_train',
+            'linear_test',
+            'retrained_linear_train',
+            'retrained_linear_test',
+            'explicit_linear_train', 
+            'explicit_linear_test'        
+        ]:
+            try:
+                df[k] = np.mean([run[k][-1] for run in r])
+                
+            except KeyError:
+                pass
+            
+        tmp.append(pd.DataFrame(df, index=[i]))
+    
+    B = pd.concat(tmp, sort=False)
+    return A.join(B) 
 
 
 def load_experiment_context(path, run_i=0):

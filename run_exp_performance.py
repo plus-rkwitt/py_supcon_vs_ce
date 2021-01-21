@@ -23,7 +23,7 @@ if __name__ == '__main__':
         {
             'output_root_dir': output_root_dir,
             'num_batches': 100000,
-            'tag': 'noisy_labels',
+            'tag': 'performance_rerun_fixed_weights',
             'eval_interval': None,
             'num_runs': 1,
             'num_samples': None,
@@ -34,13 +34,13 @@ if __name__ == '__main__':
             'ds_test': None,
             'momentum': 0.9,
             'augment': None,
-            'batch_size': 256,
+            'batch_size': None,
             'losses': None,
             'losses_track_only': (),
             'w_losses': None,
             'evaluation_policies': (
                 'linear', 'retrained_linear', 'explicit_linear'),
-            'scheduler': 'exponential'
+            'scheduler': None
         }
 
     model_and_loss = []
@@ -53,7 +53,6 @@ if __name__ == '__main__':
             'batch_norm': True,
         })
     }
-    model_and_loss.append(supcon)
 
     ce_template = {
         'losses': [('CrossEntropy', {'reduction': 'mean'})],
@@ -73,7 +72,6 @@ if __name__ == '__main__':
             'linear_cfg': ('Linear', {'bias': False}),
         }
     )
-    model_and_loss.append(ce_vanilla)
 
     ce_fixed_weights = copy.deepcopy(ce_template)
     ce_fixed_weights['model'][1].update(
@@ -82,7 +80,6 @@ if __name__ == '__main__':
             'linear_cfg': ('FixedSphericalSimplexLinear', {}),
         }
     )
-    model_and_loss.append(ce_fixed_weights)
 
     ce_samples_on_sphere = copy.deepcopy(ce_template)
     ce_samples_on_sphere['model'][1].update(
@@ -91,7 +88,12 @@ if __name__ == '__main__':
             'linear_cfg': ('Linear', {'bias': False}),
         }
     )
-    model_and_loss.append(ce_samples_on_sphere)
+    model_and_loss = [
+        # supcon, 
+        # ce_vanilla, 
+        ce_fixed_weights, 
+        # ce_samples_on_sphere, 
+    ]
 
     data = [
         {'ds_train': 'cifar10_train', 'ds_test': 'cifar10_test'},
@@ -106,22 +108,27 @@ if __name__ == '__main__':
         {'augment': p} for p in ['none', 'standard']
     ]
 
+    batch_size = [
+        {'batch_size': b} for b in [256, 512]
+    ]
+
     l_args = []
-    for m, d, s, a in itertools.product(model_and_loss, data, scheduler, augment):
+    for m, d, s, a, b in itertools.product(model_and_loss, data, scheduler, augment, batch_size):
         args = copy.deepcopy(args_template)
         args.update(m)
         args.update(d)
         args.update(s)
         args.update(a)
+        args.update(b)
         l_args.append(args)
 
     config = [((), a) for a in l_args]
-    print(len(config))
+    # print(len(config))
 
-    for i, (_, a) in enumerate(config):
+    # for i, (_, a) in enumerate(config):
         
-        with torch.cuda.device('cuda:0'):
-            print(i)
-            Experiment(**a)()
+    #     with torch.cuda.device('cuda:0'):
+    #         print(i)
+    #         Experiment(**a)()
 
-    # scatter_fn_on_devices(fn_wrapper, config, [2, 3], 1)
+    scatter_fn_on_devices(fn_wrapper, config, [1, 3], 1)

@@ -101,6 +101,47 @@ class NoisyLabels(torch.utils.data.dataset.Dataset):
     def __len__(self):
         return len(self._wrappee)
 
+
+class NoisyLabelsZhang(torch.utils.data.dataset.Dataset):
+    def __init__(self, wrappee, label_noise_fraction):
+
+        labels = [wrappee[i][1] for i in range(len(wrappee))]
+        assert all((isinstance(y, int) for y in labels))
+
+        set_labels = set(labels)
+
+        num_labels = len(set_labels)
+        num_samples = len(wrappee)
+
+        assert set_labels == set(range(num_labels))
+
+        if label_noise_fraction > 0.0:
+            labels = np.array(labels)
+            assert label_noise_fraction <= 1.0
+
+            # compute number of labels to flip
+            flip_n = int(num_samples * label_noise_fraction)
+
+            # compute indices of labels to flip
+            flip_idx = np.random.choice(
+                num_samples,
+                size=(flip_n,),
+                replace=False)
+
+            flipped_labels = np.random.randint(0, num_labels, (flip_n,))
+
+            labels[flip_idx] = flipped_labels
+            labels = labels.tolist()
+
+        self._labels = labels
+        self._wrappee = wrappee
+
+    def __getitem__(self, idx):
+        return self._wrappee[idx][0], self._labels[idx]
+
+    def __len__(self):
+        return len(self._wrappee)        
+
 # region Losses
 
 
@@ -596,6 +637,23 @@ class ExpNoisyLabeledData(Experiment):
                 self.args['label_noise_fraction'])
 
             yield None
+
+
+class ExpNoisyLabeledDataZhang(Experiment):
+
+    num_batches_for_retraining_of_linear = 1000
+    args = {k: v for k, v in Experiment.args.items()}
+    args.update(
+        {'label_noise_fraction': float}
+    )
+
+    def ds_setup_iter(self):
+        for _ in super().ds_setup_iter():
+            self.ds_train = NoisyLabelsZhang(
+                self.ds_train,
+                self.args['label_noise_fraction'])
+
+            yield None            
 
 
 class ExpRandomLabeledData(Experiment):

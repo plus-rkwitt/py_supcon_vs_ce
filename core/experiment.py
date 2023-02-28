@@ -361,7 +361,7 @@ class Experiment(ExperimentBase):
             'supcon']
 
         for e in self.args['evaluation_policies']:
-            assert e in ('linear', 'retrained_linear', 'explicit_linear'), e
+            assert e in ('linear', 'retrained_linear', 'explicit_linear', 'dump_representations'), e
 
         self.losses, self.losses_track_only = [], []
 

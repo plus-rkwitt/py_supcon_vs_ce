@@ -1,20 +1,20 @@
 from pathlib import Path
 from torchvision.datasets import CIFAR10, CIFAR100, SVHN, MNIST
 
-DATA_ROOT = Path("/scratch2/chofer/data/")
+DATA_ROOT = Path("./data/")
 
 RESULTS_ROOT = Path('./results')
 DATA_TRAIN_INDICES = Path('./train_indices.pkl')
 
 DS_PATH_CFG = {
     'cifar10_train':
-        (CIFAR10, {'root': DATA_ROOT / 'cifar10', 'train': True}),
+        (CIFAR10, {'root': DATA_ROOT / 'cifar10', 'train': True, 'download': True}),
     'cifar10_test':
-        (CIFAR10, {'root': DATA_ROOT / 'cifar10', 'train': False}),
+        (CIFAR10, {'root': DATA_ROOT / 'cifar10', 'train': False, 'download': True}),
     'cifar100_train':
-        (CIFAR100, {'root': DATA_ROOT / 'cifar100', 'train': True}),
+        (CIFAR100, {'root': DATA_ROOT / 'cifar100', 'train': True, 'download': True}),
     'cifar100_test':
-        (CIFAR100, {'root': DATA_ROOT / 'cifar100', 'train': False}),
+        (CIFAR100, {'root': DATA_ROOT / 'cifar100', 'train': False, 'download': True}),
 }
 
 

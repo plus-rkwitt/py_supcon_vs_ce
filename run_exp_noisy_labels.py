@@ -4,11 +4,34 @@ import copy
 import torch
 
 from core.experiment import ExpNoisyLabeledData
+from nb_common import load_results
+from pathlib import Path
 
 
 def fn_wrapper(*args, **kwargs):
     f = ExpNoisyLabeledData(**kwargs)
     f()
+
+
+def check_args_equal(first, second):
+    
+    # assert type(first) == type(second), (first, second)
+    if isinstance(first, (int, float, str, type(None))):
+        return first == second 
+    elif isinstance(first, dict):
+        return all((
+            check_args_equal(first[k], second[k]) for k in first if k != 'tag'
+        ))
+    elif isinstance(first, (list, tuple)):
+        if len(first) == 2 and isinstance(first[0],str) and isinstance(first[1], dict):
+            assert len(second) == 2 and isinstance(second[0],str) and isinstance(second[1], dict)
+            return first[0] == second[0] and check_args_equal(first[1], second[1])
+        else:        
+            return all((
+                check_args_equal(first_i, second_i) for first_i, second_i in zip(first, second)
+            ))
+    else:
+        raise ValueError(first, second)
 
 
 if __name__ == '__main__':
@@ -17,7 +40,7 @@ if __name__ == '__main__':
     import torch.multiprocessing as mp
 
     mp.set_start_method('spawn', force=True)
-    output_root_dir = '/home/pma/chofer/repositories/py_supcon_vs_ce/results_xmas_noisy_label'
+    output_root_dir = './results_noisy_label'
 
     args_template = \
         { 
@@ -25,7 +48,7 @@ if __name__ == '__main__':
             'num_batches' : 100000, 
             'label_noise_fraction': None,
             'tag' : 'noisy_labels', 
-            'eval_interval' : 1000, 
+            'eval_interval' : 500, 
             'num_runs' : 1, 
             'num_samples' : None, 
             'model' : None, 
@@ -90,7 +113,7 @@ if __name__ == '__main__':
 
     data = [
         {'ds_train': 'cifar10_train', 'ds_test': 'cifar10_test'}, 
-        {'ds_train': 'cifar100_train', 'ds_test': 'cifar100_test'}, 
+       {'ds_train': 'cifar100_train', 'ds_test': 'cifar100_test'},
     ]
 
     l_args = []
@@ -101,11 +124,32 @@ if __name__ == '__main__':
         args.update(d)
         l_args.append(args)
 
-    config = [((), a) for a in l_args]
+    
+    # print(len(config))
 
     # for i, (_, a) in enumerate(config):
     #     with torch.cuda.device('cuda:0'):
     #         print(i)
     #         ExpNoisyLabeledData(**a)()
 
-    scatter_fn_on_devices(fn_wrapper, config, [0, 1, 2, 3], 1)
+    existing_result_args = [
+        r.experiment_args for r in 
+        load_results(Path(output_root_dir))
+    ]
+
+    for arg in existing_result_args: del arg['experiment_type']
+    tmp = []
+
+    for arg in l_args:
+        if not any((
+            check_args_equal(arg, ex_arg) for ex_arg in existing_result_args
+        )):
+            tmp.append(arg)
+
+    print("Experiments to compute: {}".format(len(l_args)))
+    print("Allready computed results: {}".format(len(existing_result_args)))
+    print("Remaining experiments: {}".format(len(tmp)))
+
+    config = [((), a) for a in tmp]
+
+    scatter_fn_on_devices(fn_wrapper, config, [0, 1, 2], 1) #[0,1,2] corresponds to ['cuda:0', 'cuda:1', 'cuda:2']

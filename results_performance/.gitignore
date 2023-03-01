@@ -1,0 +1,7 @@
+# Results from the performance experiments are saved in this directory.
+#
+#
+# Ignore everything in this directory
+*
+# Except this file
+!.gitignore

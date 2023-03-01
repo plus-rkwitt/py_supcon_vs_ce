@@ -17,14 +17,14 @@ if __name__ == '__main__':
     import torch.multiprocessing as mp
 
     mp.set_start_method('spawn', force=True)
-    output_root_dir = '/home/pma/chofer/repositories/py_supcon_vs_ce/results_xmas_performance'
+    output_root_dir = './results_performance/'
 
     args_template = \
         {
             'output_root_dir': output_root_dir,
             'num_batches': 100000,
-            'tag': 'performance_rerun_fixed_weights',
-            'eval_interval': None,
+            'tag': 'performance',
+            'eval_interval': 10000,
             'num_runs': 1,
             'num_samples': None,
             'model': None,
@@ -38,8 +38,7 @@ if __name__ == '__main__':
             'losses': None,
             'losses_track_only': (),
             'w_losses': None,
-            'evaluation_policies': (
-                'linear', 'retrained_linear', 'explicit_linear'),
+            'evaluation_policies': ('explicit_linear', 'dump_representations'),
             'scheduler': None
         }
 
@@ -89,10 +88,10 @@ if __name__ == '__main__':
         }
     )
     model_and_loss = [
-        # supcon, 
-        # ce_vanilla, 
+        supcon, 
+        ce_vanilla, 
         ce_fixed_weights, 
-        # ce_samples_on_sphere, 
+        #ce_samples_on_sphere, 
     ]
 
     data = [
@@ -101,7 +100,10 @@ if __name__ == '__main__':
     ]
 
     scheduler = [
-        {'scheduler': p} for p in ['exponential', 'cosine']
+        {'scheduler': p} for p in [
+            'exponential', 
+            # 'cosine'
+    ]
     ]
 
     augment = [
@@ -109,7 +111,10 @@ if __name__ == '__main__':
     ]
 
     batch_size = [
-        {'batch_size': b} for b in [256, 512]
+        {'batch_size': b} for b in [
+            256, 
+            # 512
+            ]
     ]
 
     l_args = []
@@ -131,4 +136,4 @@ if __name__ == '__main__':
     #         print(i)
     #         Experiment(**a)()
 
-    scatter_fn_on_devices(fn_wrapper, config, [1, 3], 1)
+    scatter_fn_on_devices(fn_wrapper, config, [0, 1, 2], 1) #[0,1,2] corresponds to ['cuda:0', 'cuda:1', 'cuda:2']

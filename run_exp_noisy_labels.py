@@ -103,7 +103,11 @@ if __name__ == '__main__':
             ,)
     }
 
-    model_and_loss = [supcon, ce_vanilla, ce_fixed_weights]
+    model_and_loss = [
+        supcon,
+        ce_vanilla,
+        ce_fixed_weights
+    ]
 
     label_noise_fraction = [
         {'label_noise_fraction': p} 
